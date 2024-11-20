@@ -1,6 +1,6 @@
 import { Handler } from '@netlify/functions';
+import crypto from 'crypto';
 import mailchimp from '@mailchimp/mailchimp_marketing';
-import querystring from 'querystring';
 
 interface MailchimpWebhookData {
   type: string;
@@ -13,100 +13,91 @@ interface MailchimpWebhookData {
 }
 
 const handler: Handler = async (event) => {
-  console.log('Webhook Invoked', event.httpMethod);
+  if (event.httpMethod !== 'POST' && event.httpMethod !== 'GET') {
+    return {
+      statusCode: 405,
+      body: 'Method Not Allowed'
+    };
+  }
 
   if (event.httpMethod === 'GET') {
     return {
       statusCode: 200,
-      body: JSON.stringify({ message: "Webhook URL verified" }),
+      body: 'Webhook URL verified'
     };
   }
 
-  if (event.httpMethod === 'POST') {
-    let payload: MailchimpWebhookData;
-
-    // Attempt to parse the payload in different formats
-    try {
-      if (event.headers['content-type']?.includes('application/json')) {
-        // If JSON, parse it as JSON
-        payload = JSON.parse(event.body || '{}') as MailchimpWebhookData;
-      } else if (event.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
-        // If URL encoded, parse it as URL encoded form data
-        const parsedBody = querystring.parse(event.body || '');
-        payload = parsedBody as unknown as MailchimpWebhookData;
-      } else {
-        throw new Error('Unsupported content type');
-      }
-    } catch (parseError) {
-      console.error('Parsing error:', parseError);
-      return {
-        statusCode: 400,
-        body: 'Invalid payload received',
-      };
-    }
-
+  try {
+    const payload = JSON.parse(event.body || '{}') as MailchimpWebhookData;
     console.log('Webhook payload received:', JSON.stringify(payload, null, 2));
 
     // Initialize Mailchimp client
     const apiKey = process.env.MAILCHIMP_API_KEY;
     const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
-
+    
     if (!apiKey || !audienceId) {
       throw new Error('Mailchimp configuration missing');
     }
 
     mailchimp.setConfig({
       apiKey,
-      server: apiKey.split('-')[1],
+      server: apiKey.split('-')[1]
     });
 
     // Handle new subscriber event
     if (payload.type === 'subscribe') {
       const { email } = payload.data;
 
-      // Generate a new voucher code (implement your logic here)
-      const voucherCode = generateVoucherCode();
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 30); // 30 days validity
+      // Retrieve a voucher from the specified campaign
+      const campaignId = 'YOUR_DEFAULT_CAMPAIGN_ID_HERE'; // <-- Specify the default campaign
+      const voucherDetails = await getVoucherFromCampaign(campaignId);
 
-      try {
-        await mailchimp.lists.updateListMember(audienceId, email, {
-          merge_fields: {
-            VOUCHER: voucherCode,
-            VEXPIRY: expiryDate.toISOString().split('T')[0],
-          },
-        });
-
-        console.log(`Updated subscriber ${email} with voucher code ${voucherCode}`);
-      } catch (updateError) {
-        console.error('Failed to update subscriber:', updateError);
-        return {
-          statusCode: 500,
-          body: 'Failed to update subscriber',
-        };
+      if (!voucherDetails) {
+        throw new Error('No available vouchers in the campaign');
       }
+
+      // Update subscriber with voucher details
+      await mailchimp.lists.updateListMember(audienceId, email, {
+        merge_fields: {
+          VOUCHER: voucherDetails.voucherCode,
+          VEXPIRY: voucherDetails.expiryDate.toISOString().split('T')[0],
+          VQRCODE: voucherDetails.qrCodeUrl
+        }
+      });
+
+      console.log(`Updated subscriber ${email} with voucher code ${voucherDetails.voucherCode}`);
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true }),
+      body: JSON.stringify({ success: true })
+    };
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'Webhook processing failed' })
     };
   }
-
-  return {
-    statusCode: 405,
-    body: JSON.stringify({ error: 'Method not allowed' }),
-  };
 };
 
-// Helper function to generate voucher code
-function generateVoucherCode(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+// Helper function to get voucher from a campaign
+async function getVoucherFromCampaign(campaignId: string) {
+  // Replace this with the actual logic to retrieve an unused voucher from your campaign
+  // You might want to query your database or in-memory storage to find an unused voucher.
+  const vouchers = await getVouchersFromDatabase(campaignId);
+  const availableVoucher = vouchers.find(voucher => !voucher.assigned);
+
+  if (availableVoucher) {
+    availableVoucher.assigned = true; // Mark the voucher as assigned
+    // Save the updated voucher status to the database (if applicable)
+    await saveVoucherToDatabase(availableVoucher);
+    return availableVoucher;
   }
-  return code;
+  return null;
 }
+
+export { handler };
+
 
 export { handler };
