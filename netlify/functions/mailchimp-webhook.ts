@@ -28,10 +28,10 @@ const handler: Handler = async (event) => {
       const rawPayload = JSON.parse(event.body || '{}');
       console.log('Webhook payload received:', JSON.stringify(rawPayload, null, 2));
 
-      // Access data using the correct structure
+      // Extract information from the payload
       const email = rawPayload['data[email]'];
       const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
-      const campaignId = rawPayload['data[campaign_id]'];
+      const campaignId = rawPayload['data[merges][CAMPAIGN_ID]']; // Extract campaign ID from payload merge fields
 
       if (!email) {
         throw new Error('Email not provided in the payload');
@@ -41,14 +41,8 @@ const handler: Handler = async (event) => {
         throw new Error('Campaign ID not provided in the payload');
       }
 
-      // Validate Campaign ID
-      if (!isValidCampaignId(campaignId)) {
-        console.error('Invalid Mailchimp Campaign ID:', campaignId);
-        return {
-          statusCode: 400,
-          body: JSON.stringify({ error: 'Invalid Mailchimp Campaign ID' }),
-        };
-      }
+      // No need to hardcode or validate campaign ID in the backend.
+      console.log(`Processing Campaign ID: ${campaignId}`);
 
       // Initialize Mailchimp client
       const apiKey = process.env.MAILCHIMP_API_KEY;
@@ -96,14 +90,6 @@ const handler: Handler = async (event) => {
   };
 };
 
-// Helper function to validate campaign ID
-function isValidCampaignId(campaignId: string): boolean {
-  // Replace with logic to check the campaign ID against known IDs,
-  // for example, from a database, a list in the code, or environment variable
-  const validCampaignIds = [process.env.MAILCHIMP_CAMPAIGN_ID];
-  return validCampaignIds.includes(campaignId);
-}
-
 // Helper function to generate voucher code
 function generateVoucherCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -115,4 +101,5 @@ function generateVoucherCode(): string {
 }
 
 export { handler };
+
 
