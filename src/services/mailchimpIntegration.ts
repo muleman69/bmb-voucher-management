@@ -30,10 +30,56 @@ export class MailchimpService {
     });
   }
 
-  async setupWebhook(): Promise<void> {
+  async setupMergeFields(): Promise<void> {
+    try {
+      const mergeFields = [
+        {
+          tag: 'VOUCHER',
+          name: 'Voucher Code',
+          type: 'text',
+          required: false,
+          public: true
+        },
+        {
+          tag: 'VEXPIRY',
+          name: 'Voucher Expiry',
+          type: 'date',
+          required: false,
+          public: true
+        },
+        {
+          tag: 'VQRCODE',
+          name: 'Voucher QR Code',
+          type: 'imageurl',
+          required: false,
+          public: true
+        }
+      ];
+
+      for (const field of mergeFields) {
+        try {
+          await this.client.lists.addListMergeField(this.config.audienceId, field);
+          console.log(`Created merge field: ${field.tag}`);
+        } catch (error: any) {
+          // If field already exists, continue
+          if (error.status !== 400) {
+            throw error;
+          }
+        }
+      }
+
+      toast.success('Mailchimp merge fields configured successfully');
+    } catch (error) {
+      console.error('Error setting up merge fields:', error);
+      toast.error('Failed to configure merge fields');
+      throw error;
+    }
+  }
+
+  async createWebhook(): Promise<void> {
     try {
       // First ensure merge fields exist
-      await this.ensureMergeFieldsExist();
+      await this.setupMergeFields();
 
       // Get the current domain
       const domain = window.location.hostname;
@@ -41,12 +87,11 @@ export class MailchimpService {
 
       if (isLocalhost) {
         toast.error('Webhooks cannot be configured on localhost. Please deploy the application first.');
-        console.log('To test locally, you can manually trigger the voucher assignment by using the test function.');
         return;
       }
 
       // Create webhook with proper URL
-      const webhookUrl = `${window.location.origin}/api/mailchimp-webhook`;
+      const webhookUrl = `${window.location.origin}/.netlify/functions/mailchimp-webhook`;
       
       // List existing webhooks
       const { webhooks } = await this.client.lists.getListWebhooks(this.config.audienceId);
@@ -63,7 +108,12 @@ export class MailchimpService {
       await this.client.lists.createListWebhook(this.config.audienceId, {
         url: webhookUrl,
         events: {
-          subscribe: true
+          subscribe: true,
+          unsubscribe: false,
+          profile: false,
+          cleaned: false,
+          upemail: false,
+          campaign: false
         },
         sources: {
           user: true,
@@ -76,23 +126,15 @@ export class MailchimpService {
     } catch (error) {
       console.error('Error setting up webhook:', error);
       toast.error('Failed to configure webhook');
+      throw error;
     }
   }
 
-  // Test function for local development
-  async testVoucherAssignment(email: string, campaignName: string): Promise<void> {
+  async verifyCampaign(campaignId: string) {
     try {
-      const result = await this.assignVoucherToSubscriber(email, campaignName);
-      if (result) {
-        toast.success(`Test successful! Voucher assigned to ${email}`);
-      } else {
-        toast.error('Failed to assign test voucher');
-      }
+      return await this.client.campaigns.get(campaignId);
     } catch (error) {
-      console.error('Test failed:', error);
-      toast.error('Test failed');
+      throw new Error('Invalid campaign ID');
     }
   }
-
-  // ... rest of the existing methods remain the same ...
 }
