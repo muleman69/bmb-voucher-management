@@ -1,5 +1,6 @@
 import { Handler } from '@netlify/functions';
 import mailchimp from '@mailchimp/mailchimp_marketing';
+import querystring from 'querystring';
 
 interface MailchimpWebhookData {
   type: string;
@@ -22,46 +23,53 @@ const handler: Handler = async (event) => {
   }
 
   if (event.httpMethod === 'POST') {
+    let payload: MailchimpWebhookData;
+
+    // Attempt to parse the payload in different formats
     try {
-      let payload: MailchimpWebhookData;
-      
-      // Attempt to parse the payload safely
-      try {
-        // Sometimes the incoming data may not be JSON, catch any error
+      if (event.headers['content-type']?.includes('application/json')) {
+        // If JSON, parse it as JSON
         payload = JSON.parse(event.body || '{}') as MailchimpWebhookData;
-      } catch (parseError) {
-        console.error('Parsing error:', parseError);
-        return {
-          statusCode: 400,
-          body: 'Invalid JSON payload received',
-        };
+      } else if (event.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+        // If URL encoded, parse it as URL encoded form data
+        const parsedBody = querystring.parse(event.body || '');
+        payload = parsedBody as unknown as MailchimpWebhookData;
+      } else {
+        throw new Error('Unsupported content type');
       }
+    } catch (parseError) {
+      console.error('Parsing error:', parseError);
+      return {
+        statusCode: 400,
+        body: 'Invalid payload received',
+      };
+    }
 
-      console.log('Webhook payload received:', JSON.stringify(payload, null, 2));
+    console.log('Webhook payload received:', JSON.stringify(payload, null, 2));
 
-      // Initialize Mailchimp client
-      const apiKey = process.env.MAILCHIMP_API_KEY;
-      const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
+    // Initialize Mailchimp client
+    const apiKey = process.env.MAILCHIMP_API_KEY;
+    const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
 
-      if (!apiKey || !audienceId) {
-        throw new Error('Mailchimp configuration missing');
-      }
+    if (!apiKey || !audienceId) {
+      throw new Error('Mailchimp configuration missing');
+    }
 
-      mailchimp.setConfig({
-        apiKey,
-        server: apiKey.split('-')[1],
-      });
+    mailchimp.setConfig({
+      apiKey,
+      server: apiKey.split('-')[1],
+    });
 
-      // Handle new subscriber event
-      if (payload.type === 'subscribe') {
-        const { email } = payload.data;
+    // Handle new subscriber event
+    if (payload.type === 'subscribe') {
+      const { email } = payload.data;
 
-        // Generate a new voucher code (implement your logic here)
-        const voucherCode = generateVoucherCode();
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 30); // 30 days validity
+      // Generate a new voucher code (implement your logic here)
+      const voucherCode = generateVoucherCode();
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 30); // 30 days validity
 
-        // Update subscriber with voucher details
+      try {
         await mailchimp.lists.updateListMember(audienceId, email, {
           merge_fields: {
             VOUCHER: voucherCode,
@@ -70,19 +78,19 @@ const handler: Handler = async (event) => {
         });
 
         console.log(`Updated subscriber ${email} with voucher code ${voucherCode}`);
+      } catch (updateError) {
+        console.error('Failed to update subscriber:', updateError);
+        return {
+          statusCode: 500,
+          body: 'Failed to update subscriber',
+        };
       }
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify({ success: true }),
-      };
-    } catch (error) {
-      console.error('Webhook processing error:', error);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Webhook processing failed' }),
-      };
     }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true }),
+    };
   }
 
   return {
