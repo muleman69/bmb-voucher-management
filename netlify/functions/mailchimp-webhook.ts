@@ -2,6 +2,14 @@ import { Handler } from '@netlify/functions';
 import mailchimp from '@mailchimp/mailchimp_marketing';
 import md5 from 'md5';
 
+interface MailchimpData {
+  'data[merges][EMAIL]'?: string;
+  'data[email]'?: string;
+  'data[merges][CAMPAIGNID]'?: string;
+  'data[merges][FNAME]'?: string;
+  'data[merges][LNAME]'?: string;
+}
+
 const handler: Handler = async (event) => {
   console.log('Webhook Invoked', event.httpMethod);
 
@@ -14,23 +22,35 @@ const handler: Handler = async (event) => {
 
   if (event.httpMethod === 'POST') {
     try {
-      // Parse the form data instead of expecting JSON
-      const formData = new URLSearchParams(event.body);
-      console.log('Form data received:', Object.fromEntries(formData));
-
-      // Extract information from the form data
-      const email = formData.get('email');
-      const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
-      const campaignId = formData.get('CAMPAIGNID');
-
-      if (!email) {
-        throw new Error('Email not provided in the form data');
+      // Parse the incoming data
+      let data: MailchimpData;
+      try {
+        const rawData = event.body || '{}';
+        // Try parsing as JSON first
+        data = JSON.parse(rawData);
+      } catch (e) {
+        // If JSON parsing fails, try form data
+        const formData = new URLSearchParams(event.body);
+        data = Object.fromEntries(formData);
       }
 
-      console.log(`Processing submission for email: ${email}`);
+      console.log('Data received:', data);
+
+      // Extract email from the Mailchimp data structure
+      const email = data['data[merges][EMAIL]'] || data['data[email]'];
+      const campaignId = data['data[merges][CAMPAIGNID]'] || '9074479';
+
+      if (!email) {
+        console.error('Email missing from data:', data);
+        throw new Error('Email not found in webhook data');
+      }
+
+      console.log(`Processing for email: ${email}, campaign: ${campaignId}`);
 
       // Initialize Mailchimp client
       const apiKey = process.env.MAILCHIMP_API_KEY;
+      const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
+
       if (!apiKey || !audienceId) {
         throw new Error('Mailchimp configuration missing');
       }
@@ -40,35 +60,41 @@ const handler: Handler = async (event) => {
         server: apiKey.split('-')[1],
       });
 
-      // Generate a new voucher code
+      // Generate voucher code
       const voucherCode = generateVoucherCode();
       const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 7); // 7 days validity
+      expiryDate.setDate(expiryDate.getDate() + 7);
 
-      // Update subscriber with voucher details
-      await mailchimp.lists.updateListMember(audienceId, md5(email.toLowerCase()), {
+      // Update subscriber in Mailchimp
+      const subscriberHash = md5(email.toLowerCase());
+      await mailchimp.lists.updateListMember(audienceId, subscriberHash, {
         merge_fields: {
           VOUCHER: voucherCode,
           VEXPIRY: expiryDate.toISOString().split('T')[0],
-          CAMPAIGNID: campaignId || '9074479' // Use provided campaign ID or default
+          CAMPAIGNID: campaignId
         },
       });
 
-      console.log(`Updated subscriber ${email} with voucher code ${voucherCode}`);
+      console.log(`Successfully updated subscriber ${email} with voucher ${voucherCode}`);
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           success: true,
+          email,
           voucherCode,
           expiryDate: expiryDate.toISOString().split('T')[0]
         }),
       };
+
     } catch (error) {
       console.error('Webhook processing error:', error);
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: String(error) }),
+        body: JSON.stringify({ 
+          error: String(error),
+          details: error instanceof Error ? error.stack : undefined
+        }),
       };
     }
   }
