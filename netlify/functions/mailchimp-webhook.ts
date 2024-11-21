@@ -2,16 +2,6 @@ import { Handler } from '@netlify/functions';
 import mailchimp from '@mailchimp/mailchimp_marketing';
 import md5 from 'md5';
 
-interface MailchimpWebhookData {
-  type: string;
-  fired_at: string;
-  data: {
-    email?: string;
-    list_id: string;
-    merges: Record<string, string>;
-  };
-}
-
 const handler: Handler = async (event) => {
   console.log('Webhook Invoked', event.httpMethod);
 
@@ -24,29 +14,23 @@ const handler: Handler = async (event) => {
 
   if (event.httpMethod === 'POST') {
     try {
-      // Parse the webhook payload
-      const rawPayload = JSON.parse(event.body || '{}');
-      console.log('Webhook payload received:', JSON.stringify(rawPayload, null, 2));
+      // Parse the form data instead of expecting JSON
+      const formData = new URLSearchParams(event.body);
+      console.log('Form data received:', Object.fromEntries(formData));
 
-      // Extract information from the payload
-      const email = rawPayload['data[email]'];
+      // Extract information from the form data
+      const email = formData.get('email');
       const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
-      const campaignId = rawPayload['data[merges][CAMPAIGN_ID]']; // Extract campaign ID from payload merge fields
+      const campaignId = formData.get('CAMPAIGNID');
 
       if (!email) {
-        throw new Error('Email not provided in the payload');
+        throw new Error('Email not provided in the form data');
       }
 
-      if (!campaignId) {
-        throw new Error('Campaign ID not provided in the payload');
-      }
-
-      // No need to hardcode or validate campaign ID in the backend.
-      console.log(`Processing Campaign ID: ${campaignId}`);
+      console.log(`Processing submission for email: ${email}`);
 
       // Initialize Mailchimp client
       const apiKey = process.env.MAILCHIMP_API_KEY;
-
       if (!apiKey || !audienceId) {
         throw new Error('Mailchimp configuration missing');
       }
@@ -59,13 +43,14 @@ const handler: Handler = async (event) => {
       // Generate a new voucher code
       const voucherCode = generateVoucherCode();
       const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 30); // 30 days validity
+      expiryDate.setDate(expiryDate.getDate() + 7); // 7 days validity
 
       // Update subscriber with voucher details
       await mailchimp.lists.updateListMember(audienceId, md5(email.toLowerCase()), {
         merge_fields: {
           VOUCHER: voucherCode,
           VEXPIRY: expiryDate.toISOString().split('T')[0],
+          CAMPAIGNID: campaignId || '9074479' // Use provided campaign ID or default
         },
       });
 
@@ -73,13 +58,17 @@ const handler: Handler = async (event) => {
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ success: true }),
+        body: JSON.stringify({ 
+          success: true,
+          voucherCode,
+          expiryDate: expiryDate.toISOString().split('T')[0]
+        }),
       };
     } catch (error) {
       console.error('Webhook processing error:', error);
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: 'Webhook processing failed' }),
+        body: JSON.stringify({ error: String(error) }),
       };
     }
   }
@@ -90,11 +79,10 @@ const handler: Handler = async (event) => {
   };
 };
 
-// Helper function to generate voucher code
 function generateVoucherCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 8; i++) {
+  let code = 'AGAVIA-';
+  for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
