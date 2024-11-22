@@ -1,41 +1,35 @@
-import { Handler } from '@netlify/functions';
 import mailchimp from '@mailchimp/mailchimp_marketing';
 
-const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { 
-      statusCode: 405, 
-      body: JSON.stringify({ error: 'Method not allowed' }) 
-    };
-  }
+class MailchimpService {
+  apiKey: string;
+  audienceId: string;
+  webhookSecret: string;
 
-  try {
-    const { apiKey, audienceId, webhookSecret } = JSON.parse(event.body || '{}');
-    
+  constructor(apiKey: string, audienceId: string, webhookSecret: string) {
     if (!apiKey || !audienceId || !webhookSecret) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Missing required fields' })
-      };
+      throw new Error('Missing required fields for Mailchimp configuration');
     }
+    
+    this.apiKey = apiKey;
+    this.audienceId = audienceId;
+    this.webhookSecret = webhookSecret;
 
     // Initialize Mailchimp client
     mailchimp.setConfig({
-      apiKey,
-      server: apiKey.split('-')[1]
+      apiKey: this.apiKey,
+      server: this.apiKey.split('-')[1] // Extract server from apiKey
     });
+  }
 
-    // Test API connection
+  async testApiConnection() {
     try {
       await mailchimp.ping.get();
     } catch (error) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: 'Invalid Mailchimp API key' })
-      };
+      throw new Error('Invalid Mailchimp API key');
     }
+  }
 
-    // Set up merge fields
+  async configureMergeFields() {
     const mergeFields = [
       {
         tag: 'VOUCHER',
@@ -60,28 +54,61 @@ const handler: Handler = async (event) => {
     // Create merge fields
     for (const field of mergeFields) {
       try {
-        await mailchimp.lists.addListMergeField(audienceId, field);
+        await mailchimp.lists.addListMergeField(this.audienceId, field);
       } catch (error: any) {
         // Ignore 400 errors as they likely mean the field already exists
         if (error.status !== 400) {
-          throw error;
+          throw new Error(`Failed to create merge field: ${field.tag}`);
         }
       }
     }
+  }
+}
+
+export { MailchimpService };
+
+// Netlify function handler for webhook integration
+import { Handler } from '@netlify/functions';
+
+const handler: Handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ error: 'Method not allowed' })
+    };
+  }
+
+  try {
+    const { apiKey, audienceId, webhookSecret } = JSON.parse(event.body || '{}');
+
+    if (!apiKey || !audienceId || !webhookSecret) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing required fields' })
+      };
+    }
+
+    // Instantiate MailchimpService
+    const mailchimpService = new MailchimpService(apiKey, audienceId, webhookSecret);
+
+    // Test API connection
+    await mailchimpService.testApiConnection();
+
+    // Configure merge fields
+    await mailchimpService.configureMergeFields();
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         success: true,
         message: 'Mailchimp configuration complete'
       })
     };
-
   } catch (error) {
     console.error('Mailchimp settings error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: error instanceof Error ? error.message : 'Internal server error'
       })
     };
