@@ -3,26 +3,39 @@ import mailchimp from '@mailchimp/mailchimp_marketing';
 
 const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' })
+    return { 
+      statusCode: 405, 
+      body: JSON.stringify({ error: 'Method not allowed' }) 
     };
   }
 
   try {
     const { apiKey, audienceId, webhookSecret } = JSON.parse(event.body || '{}');
-
+    
     if (!apiKey || !audienceId || !webhookSecret) {
-      throw new Error('Missing required fields');
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing required fields' })
+      };
     }
 
-    // Configure Mailchimp client
+    // Initialize Mailchimp client
     mailchimp.setConfig({
       apiKey,
       server: apiKey.split('-')[1]
     });
 
-    // Test connection and set up merge fields
+    // Test API connection
+    try {
+      await mailchimp.ping.get();
+    } catch (error) {
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: 'Invalid Mailchimp API key' })
+      };
+    }
+
+    // Set up merge fields
     const mergeFields = [
       {
         tag: 'VOUCHER',
@@ -58,14 +71,19 @@ const handler: Handler = async (event) => {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true })
+      body: JSON.stringify({ 
+        success: true,
+        message: 'Mailchimp configuration complete'
+      })
     };
 
   } catch (error) {
-    console.error('Settings error:', error);
+    console.error('Mailchimp settings error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: String(error) })
+      body: JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'Internal server error'
+      })
     };
   }
 };
