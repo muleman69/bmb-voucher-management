@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { QrCode, Send } from 'lucide-react';
 import { useVoucherStore } from '../../stores/voucherStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { MailchimpService } from '../../services/mailchimpIntegration';
 import toast from 'react-hot-toast';
 
 const VoucherGenerator: React.FC = () => {
@@ -13,8 +12,7 @@ const VoucherGenerator: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   
   const generateVouchers = useVoucherStore((state) => state.generateVouchers);
-  const { mailchimpApiKey, mailchimpAudienceId, mailchimpWebhookSecret } = useSettingsStore();
-  const voucherStore = useVoucherStore();
+  const { mailchimpApiKey } = useSettingsStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,30 +28,11 @@ const VoucherGenerator: React.FC = () => {
           mailchimpCampaignId || undefined
         );
 
-        // Initialize Mailchimp service if API key is available
-        if (mailchimpApiKey && mailchimpAudienceId && mailchimpWebhookSecret) {
-          const mailchimpService = new MailchimpService(
-            { 
-              apiKey: mailchimpApiKey, 
-              audienceId: mailchimpAudienceId,
-              webhookSecret: mailchimpWebhookSecret
-            },
-            voucherStore
-          );
-
-          // Verify the campaign exists if ID was provided
-          if (mailchimpCampaignId) {
-            try {
-              const campaign = await mailchimpService.verifyCampaign(mailchimpCampaignId);
-              toast.success(`Vouchers generated and linked to campaign: ${campaign.settings.title}`);
-            } catch (error) {
-              toast.error('Invalid Mailchimp Campaign ID. Vouchers generated but not linked.');
-            }
-          } else {
-            toast.success(`Successfully generated ${numQuantity} vouchers for ${campaignName}`);
-          }
+        // Success message based on whether it's linked to a campaign
+        if (mailchimpCampaignId) {
+          toast.success(`Vouchers generated and linked to campaign ID: ${mailchimpCampaignId}`);
         } else {
-          toast.success(`Generated ${numQuantity} vouchers for ${campaignName} (Mailchimp not configured)`);
+          toast.success(`Successfully generated ${numQuantity} vouchers for ${campaignName}`);
         }
 
         // Reset form
