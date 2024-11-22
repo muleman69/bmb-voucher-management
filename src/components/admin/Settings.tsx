@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useVoucherStore } from '../../stores/voucherStore';
-import { MailchimpService } from '../../../netlify/functions/mailchimp-settings';
 import toast from 'react-hot-toast';
 
 const Settings = () => {
@@ -27,32 +26,33 @@ const Settings = () => {
   setSaving(true);
 
   try {
-    // First save the config
-    await setMailchimpConfig(
-      formData.mailchimpKey,
-      formData.mailchimpAudienceId,
-      formData.mailchimpWebhookSecret
-    );
+    // Construct the data to send to the backend function
+    const mailchimpConfig = {
+      apiKey: formData.mailchimpKey,
+      audienceId: formData.mailchimpAudienceId,
+      webhookSecret: formData.mailchimpWebhookSecret,
+    };
 
-    // Verify all fields are provided
-    if (!formData.mailchimpKey || !formData.mailchimpAudienceId || !formData.mailchimpWebhookSecret) {
-      throw new Error('Missing required fields for Mailchimp configuration');
-    }
-
-    // Create webhook and ensure merge fields
-    const mailchimpService = new MailchimpService(
-      {
-        apiKey: formData.mailchimpKey,
-        audienceId: formData.mailchimpAudienceId,
-        webhookSecret: formData.mailchimpWebhookSecret,
+    // Send a POST request to the Netlify function endpoint
+    const response = await fetch('/.netlify/functions/mailchimp-settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      useVoucherStore.getState()
-    );
+      body: JSON.stringify(mailchimpConfig),
+    });
 
-    await mailchimpService.createWebhook();
-
-    // Show success only if everything passes
-    toast.success('Settings saved and Mailchimp integration configured');
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        toast.success('Settings saved and Mailchimp integration configured');
+      } else {
+        toast.error(result.error || 'Failed to save settings');
+      }
+    } else {
+      const errorData = await response.json();
+      toast.error(errorData.error || 'Failed to save settings');
+    }
   } catch (error) {
     console.error('Error saving settings:', error);
     toast.error('Failed to save settings');
@@ -60,6 +60,7 @@ const Settings = () => {
     setSaving(false);
   }
 };
+
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
