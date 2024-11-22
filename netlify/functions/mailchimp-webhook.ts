@@ -47,9 +47,12 @@ const handler: Handler = async (event) => {
         server: MAILCHIMP_API_KEY.split('-')[1]
       });
 
+      // Generate the voucher code first
+      const code = `AGAVIA${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
       // Create voucher data
       const voucher: VoucherData = {
-        code: `AGAVIA${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        code,
         qrCode: `https://buildmybrand.xyz/voucher/${code}`,
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         isUsed: false
@@ -95,3 +98,4 @@ const handler: Handler = async (event) => {
 };
 
 export { handler };
+
