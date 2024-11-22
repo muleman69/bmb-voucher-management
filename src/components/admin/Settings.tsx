@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Save } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useVoucherStore } from '../../stores/voucherStore';
-import { MailchimpService } from '../../services/mailchimp-settings'; // Updated import
+import { MailchimpService } from '../../../netlify/functions/mailchimp-settings';
 import toast from 'react-hot-toast';
 
 const Settings = () => {
