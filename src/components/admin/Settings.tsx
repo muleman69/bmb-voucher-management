@@ -73,17 +73,18 @@ const Settings = () => {
         </div>
 
         <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-          <h3 className="text-lg font-semibold text-blue-800 mb-2">Mailchimp Setup Instructions</h3>
-          <p className="text-blue-700 mb-2">To use merge tags in your Mailchimp template:</p>
-          <ol className="list-decimal list-inside text-blue-700 space-y-1">
-            <li>Add *|VOUCHER_CODE|* where you want the voucher code to appear</li>
-            <li>Add *|VOUCHER_EXPIRY|* to show the expiration date</li>
-            <li>Add *|VOUCHER_QR|* to display the QR code image</li>
-          </ol>
-          <p className="text-blue-700 mt-2">
-            The merge fields will be automatically created in your Mailchimp audience when you save the settings.
-          </p>
-        </div>
+  <h3 className="text-lg font-semibold text-blue-800 mb-2">Mailchimp Setup Instructions</h3>
+  <p className="text-blue-700 mb-2">To use merge tags in your Mailchimp template:</p>
+  <ol className="list-decimal list-inside text-blue-700 space-y-1">
+    <li>Add *|VOUCHER|* where you want the voucher code to appear</li>
+    <li>Add *|VEXPIRY|* to show the expiration date</li>
+    <li>Add *|VQRCODE|* to display the QR code image</li>
+  </ol>
+  <p className="text-blue-700 mt-2">
+    The merge fields will be automatically created in your Mailchimp audience when
+    you save the settings.
+  </p>
+</div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
