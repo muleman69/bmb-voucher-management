@@ -23,38 +23,44 @@ const Settings = () => {
   }, [mailchimpApiKey, mailchimpAudienceId, mailchimpWebhookSecret]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    
-    try {
-      // First save the config
-      await setMailchimpConfig(
-        formData.mailchimpKey,
-        formData.mailchimpAudienceId,
-        formData.mailchimpWebhookSecret
-      );
+  e.preventDefault();
+  setSaving(true);
 
-      // Initialize and setup webhook
-      const mailchimpService = new MailchimpService(
-        {
-          apiKey: formData.mailchimpKey,
-          audienceId: formData.mailchimpAudienceId,
-          webhookSecret: formData.mailchimpWebhookSecret
-        },
-        useVoucherStore.getState()
-      );
+  try {
+    // First save the config
+    await setMailchimpConfig(
+      formData.mailchimpKey,
+      formData.mailchimpAudienceId,
+      formData.mailchimpWebhookSecret
+    );
 
-      // Create webhook and ensure merge fields
-      await mailchimpService.createWebhook();
-      
-      toast.success('Settings saved and Mailchimp integration configured');
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      toast.error('Failed to save settings');
-    } finally {
-      setSaving(false);
+    // Verify all fields are provided
+    if (!formData.mailchimpKey || !formData.mailchimpAudienceId || !formData.mailchimpWebhookSecret) {
+      throw new Error('Missing required fields for Mailchimp configuration');
     }
-  };
+
+    // Create webhook and ensure merge fields
+    const mailchimpService = new MailchimpService(
+      {
+        apiKey: formData.mailchimpKey,
+        audienceId: formData.mailchimpAudienceId,
+        webhookSecret: formData.mailchimpWebhookSecret,
+      },
+      useVoucherStore.getState()
+    );
+
+    await mailchimpService.createWebhook();
+
+    // Show success only if everything passes
+    toast.success('Settings saved and Mailchimp integration configured');
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    toast.error('Failed to save settings');
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
