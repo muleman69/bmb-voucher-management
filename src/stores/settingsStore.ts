@@ -1,23 +1,13 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import toast from 'react-hot-toast';
 
-export interface SettingsState {
+interface SettingsState {
   mailchimpApiKey: string;
   mailchimpAudienceId: string;
   mailchimpWebhookSecret: string;
-  setMailchimpConfig: (apiKey: string, audienceId: string, webhookSecret: string) => void;
+  setMailchimpConfig: (apiKey: string, audienceId: string, webhookSecret: string) => Promise<void>;
 }
-
-const migrate = (persistedState: any, version: number) => {
-  if (version === 0) {
-    return {
-      ...persistedState,
-      mailchimpWebhookSecret: '',
-      version: 1,
-    };
-  }
-  return persistedState;
-};
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -25,14 +15,30 @@ export const useSettingsStore = create<SettingsState>()(
       mailchimpApiKey: '',
       mailchimpAudienceId: '',
       mailchimpWebhookSecret: '',
-      setMailchimpConfig: (apiKey, audienceId, webhookSecret) =>
-        set({ mailchimpApiKey: apiKey, mailchimpAudienceId: audienceId, mailchimpWebhookSecret: webhookSecret }),
+      setMailchimpConfig: async (apiKey, audienceId, webhookSecret) => {
+        try {
+          // Validate the inputs
+          if (!apiKey || !audienceId || !webhookSecret) {
+            throw new Error('All fields are required');
+          }
+
+          set({
+            mailchimpApiKey: apiKey,
+            mailchimpAudienceId: audienceId,
+            mailchimpWebhookSecret: webhookSecret
+          });
+
+          toast.success('Mailchimp settings saved successfully');
+        } catch (error) {
+          console.error('Error saving settings:', error);
+          toast.error('Failed to save settings');
+          throw error;
+        }
+      }
     }),
     {
       name: 'settings-storage',
-      storage: createJSONStorage(() => localStorage),
-      version: 1,
-      migrate,
+      getStorage: () => localStorage
     }
   )
 );
