@@ -1,15 +1,17 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
-  functions = "netlify/functions"
+// Shared types for the function
+export interface VoucherData {
+  code: string;
+  qrCode: string;
+  expiryDate: string;
+  campaignName?: string;
+  isUsed: boolean;
+  usedAt?: string;
+}
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[build.environment]
-  NODE_VERSION = "18"
-
-[functions]
-  node_bundler = "esbuild"
+export interface MailchimpWebhookData {
+  'data[merges][EMAIL]'?: string;
+  'data[email]'?: string;
+  'data[merges][FNAME]'?: string;
+  'data[merges][LNAME]'?: string;
+  'data[merges][CAMPAIGNID]'?: string;
+}
