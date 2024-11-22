@@ -1,13 +1,16 @@
 import { Handler } from '@netlify/functions';
 import mailchimp from '@mailchimp/mailchimp_marketing';
 import md5 from 'md5';
+import crypto from 'crypto';
+import { useVoucherStore } from '../stores/voucherStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface MailchimpData {
   'data[merges][EMAIL]'?: string;
   'data[email]'?: string;
-  'data[merges][CAMPAIGNID]'?: string;
   'data[merges][FNAME]'?: string;
   'data[merges][LNAME]'?: string;
+  'data[merges][CAMPAIGNID]'?: string;
 }
 
 const handler: Handler = async (event) => {
@@ -22,68 +25,72 @@ const handler: Handler = async (event) => {
 
   if (event.httpMethod === 'POST') {
     try {
+      // Verify webhook signature
+      const webhookSecret = process.env.MAILCHIMP_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        throw new Error('Webhook secret not configured');
+      }
+
       // Parse the incoming data
       let data: MailchimpData;
       try {
         const rawData = event.body || '{}';
-        // Try parsing as JSON first
         data = JSON.parse(rawData);
-      } catch (e) {
-        // If JSON parsing fails, try form data
+      } catch {
         const formData = new URLSearchParams(event.body);
         data = Object.fromEntries(formData);
       }
 
-      console.log('Data received:', data);
-
-      // Extract email from the Mailchimp data structure
+      // Extract email and campaign ID
       const email = data['data[merges][EMAIL]'] || data['data[email]'];
-      const campaignId = data['data[merges][CAMPAIGNID]'] || '9074479';
+      const campaignId = data['data[merges][CAMPAIGNID]'] || 'default';
 
       if (!email) {
-        console.error('Email missing from data:', data);
         throw new Error('Email not found in webhook data');
       }
 
       console.log(`Processing for email: ${email}, campaign: ${campaignId}`);
 
-      // Initialize Mailchimp client
-      const apiKey = process.env.MAILCHIMP_API_KEY;
-      const audienceId = process.env.MAILCHIMP_AUDIENCE_ID;
-
-      if (!apiKey || !audienceId) {
-        throw new Error('Mailchimp configuration missing');
+      // Get an unassigned voucher
+      const voucherStore = useVoucherStore.getState();
+      const settings = useSettingsStore.getState();
+      
+      const campaign = voucherStore.getCampaignByMailchimpId(campaignId);
+      if (!campaign) {
+        throw new Error('No campaign found for given ID');
       }
 
+      const voucher = voucherStore.getUnassignedVoucherForCampaign(campaign);
+      if (!voucher) {
+        throw new Error('No available vouchers for campaign');
+      }
+
+      // Assign voucher to subscriber
+      await voucherStore.assignVoucher(voucher.code, email);
+
+      // Update subscriber in Mailchimp with voucher details
       mailchimp.setConfig({
-        apiKey,
-        server: apiKey.split('-')[1],
+        apiKey: settings.mailchimpApiKey,
+        server: settings.mailchimpApiKey.split('-')[1],
       });
 
-      // Generate voucher code
-      const voucherCode = generateVoucherCode();
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 7);
-
-      // Update subscriber in Mailchimp
       const subscriberHash = md5(email.toLowerCase());
-      await mailchimp.lists.updateListMember(audienceId, subscriberHash, {
+      await mailchimp.lists.updateListMember(settings.mailchimpAudienceId, subscriberHash, {
         merge_fields: {
-          VOUCHER: voucherCode,
-          VEXPIRY: expiryDate.toISOString().split('T')[0],
-          CAMPAIGNID: campaignId
+          VOUCHER: voucher.code,
+          VEXPIRY: new Date(voucher.expiryDate).toISOString().split('T')[0],
+          VQRCODE: voucher.qrCode
         },
       });
 
-      console.log(`Successfully updated subscriber ${email} with voucher ${voucherCode}`);
+      console.log(`Successfully assigned voucher ${voucher.code} to ${email}`);
 
       return {
         statusCode: 200,
         body: JSON.stringify({
           success: true,
           email,
-          voucherCode,
-          expiryDate: expiryDate.toISOString().split('T')[0]
+          voucher: voucher.code
         }),
       };
 
@@ -105,15 +112,4 @@ const handler: Handler = async (event) => {
   };
 };
 
-function generateVoucherCode(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = 'AGAVIA-';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
 export { handler };
-
-
