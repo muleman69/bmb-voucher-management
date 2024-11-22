@@ -17,26 +17,30 @@ export const useSettingsStore = create<SettingsState>()(
       mailchimpWebhookSecret: '',
       setMailchimpConfig: async (apiKey, audienceId, webhookSecret) => {
         try {
-          if (!apiKey || !audienceId || !webhookSecret) {
-            throw new Error('All fields are required');
-          }
-
-          // Call our Netlify function to setup Mailchimp
-          const response = await fetch('/.netlify/functions/mailchimp-settings', {
-            method: 'POST',
-            body: JSON.stringify({ apiKey, audienceId, webhookSecret }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to save settings');
-          }
-
+          // Save to store first
           set({
             mailchimpApiKey: apiKey,
             mailchimpAudienceId: audienceId,
             mailchimpWebhookSecret: webhookSecret
           });
+
+          // Configure Mailchimp through our Netlify function
+          const response = await fetch('/.netlify/functions/mailchimp-settings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              apiKey,
+              audienceId,
+              webhookSecret
+            })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to configure Mailchimp');
+          }
 
           toast.success('Mailchimp settings saved successfully');
         } catch (error) {
@@ -47,8 +51,7 @@ export const useSettingsStore = create<SettingsState>()(
       }
     }),
     {
-      name: 'settings-storage',
-      getStorage: () => localStorage
+      name: 'settings-storage'
     }
   )
 );
