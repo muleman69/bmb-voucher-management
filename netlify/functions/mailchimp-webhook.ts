@@ -78,7 +78,6 @@ const handler: Handler = async (event) => {
           voucher: voucher.code
         })
       };
-
     } catch (error) {
       console.error('Webhook error:', error);
       return {
@@ -98,4 +97,3 @@ const handler: Handler = async (event) => {
 };
 
 export { handler };
-
