@@ -11,51 +11,60 @@ import { Toaster } from 'react-hot-toast';
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-teal-50">
+      <div className="min-h-screen bg-gray-100">
+        <Toaster position="top-center" />
         <Navbar />
-        <div className="container mx-auto px-4 py-8">
+        
+        <main className="container mx-auto px-4 py-8">
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/admin/*"
+            <Route 
+              path="/admin" 
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/redeem"
+            <Route 
+              path="/voucher/:code" 
               element={
                 <ProtectedRoute>
                   <VoucherRedemption />
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/"
+            <Route 
+              path="/login" 
+              element={<Login />}
+            />
+            <Route 
+              path="/" 
               element={
-                <div className="flex flex-col items-center justify-center min-h-[80vh]">
-                  <Palmtree className="w-16 h-16 text-teal-600 mb-4" />
-                  <h1 className="text-4xl font-bold text-gray-800 mb-2">
+                <div className="max-w-3xl mx-auto text-center">
+                  <div className="mb-8">
+                    <Palmtree className="w-16 h-16 mx-auto text-emerald-600" />
+                  </div>
+
+                  <h1 className="text-4xl font-bold text-gray-900 mb-4">
                     Agavia Bar Voucher System
                   </h1>
-                  <p className="text-gray-600 text-center max-w-md mb-8">
+
+                  <p className="text-xl text-gray-600 mb-8">
                     Empowering new bars and restaurants to generate buzz and build their brand—fast, effectively, and affordably.
                   </p>
-                  <Link
+
+                  <Link 
                     to="/login"
-                    className="flex items-center gap-2 bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors shadow-lg"
+                    className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700"
                   >
-                    <LogIn className="w-5 h-5" />
-                    <span>Login to Dashboard</span>
+                    <LogIn className="w-5 h-5 mr-2" />
+                    Login to Dashboard
                   </Link>
                 </div>
               }
             />
           </Routes>
-        </div>
-        <Toaster position="top-right" />
+        </main>
       </div>
     </BrowserRouter>
   );
