@@ -14,7 +14,6 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-gray-100">
         <Toaster position="top-center" />
-        {/* Only show Navbar on protected routes */}
         <Routes>
           <Route path="/admin/*" element={<Navbar />} />
           <Route path="/redeem/*" element={<Navbar />} />
