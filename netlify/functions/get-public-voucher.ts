@@ -1,6 +1,9 @@
 import { Handler } from '@netlify/functions';
 import { db } from './utils/firebase';  // Make sure this path matches your firebase utility file
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import { Handler } from '@netlify/functions';
+import { db } from './utils/firebase';
+import { collection, query, where, getDocs } from '@google-cloud/firestore';
 
 const handler: Handler = async (event) => {
   // Set CORS headers
