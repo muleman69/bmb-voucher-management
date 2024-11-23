@@ -1,9 +1,5 @@
 import { Handler } from '@netlify/functions';
-import { db } from './utils/firebase';  // Make sure this path matches your firebase utility file
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { Handler } from '@netlify/functions';
-import { db } from './utils/firebase';
-import { collection, query, where, getDocs } from '@google-cloud/firestore';
+import mailchimp from '@mailchimp/mailchimp_marketing';
 
 const handler: Handler = async (event) => {
   // Set CORS headers
@@ -23,6 +19,15 @@ const handler: Handler = async (event) => {
   }
 
   try {
+    const {
+      MAILCHIMP_API_KEY,
+      MAILCHIMP_AUDIENCE_ID
+    } = process.env;
+
+    if (!MAILCHIMP_API_KEY || !MAILCHIMP_AUDIENCE_ID) {
+      throw new Error('Missing required environment variables');
+    }
+
     const code = event.queryStringParameters?.code;
     
     if (!code) {
@@ -33,12 +38,16 @@ const handler: Handler = async (event) => {
       };
     }
 
-    // Query Firestore for the voucher
-    const vouchersRef = collection(db, 'vouchers');
-    const q = query(vouchersRef, where('code', '==', code));
-    const querySnapshot = await getDocs(q);
+    // Initialize Mailchimp client
+    mailchimp.setConfig({
+      apiKey: MAILCHIMP_API_KEY,
+      server: MAILCHIMP_API_KEY.split('-')[1]
+    });
 
-    if (querySnapshot.empty) {
+    // Search for members with this voucher code
+    const searchResponse = await mailchimp.searchMembers.search(code);
+    
+    if (!searchResponse.exact_matches.members?.length) {
       return {
         statusCode: 404,
         headers,
@@ -46,19 +55,18 @@ const handler: Handler = async (event) => {
       };
     }
 
-    // Get the voucher data
-    const voucherDoc = querySnapshot.docs[0];
-    const voucherData = voucherDoc.data();
+    // Get the first member with this voucher code
+    const member = searchResponse.exact_matches.members[0];
+    const voucherData = {
+      code: member.merge_fields.VOUCHER,
+      expiryDate: member.merge_fields.VEXPIRY,
+      isUsed: member.merge_fields.VUSED || false
+    };
 
-    // Return only the necessary public information
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({
-        code: voucherData.code,
-        expiryDate: voucherData.expiryDate,
-        isUsed: voucherData.isUsed
-      })
+      body: JSON.stringify(voucherData)
     };
 
   } catch (error) {
