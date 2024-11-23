@@ -18,7 +18,8 @@ const handler: Handler = async (event) => {
       const {
         MAILCHIMP_API_KEY,
         MAILCHIMP_AUDIENCE_ID,
-        MAILCHIMP_WEBHOOK_SECRET
+        MAILCHIMP_WEBHOOK_SECRET,
+        URL
       } = process.env;
 
       if (!MAILCHIMP_API_KEY || !MAILCHIMP_AUDIENCE_ID || !MAILCHIMP_WEBHOOK_SECRET) {
@@ -50,10 +51,11 @@ const handler: Handler = async (event) => {
       // Generate the voucher code first
       const code = `AGAVIA${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-      // Create voucher data
+      // Create voucher data using the public voucher URL
+      const baseUrl = URL || 'https://buildmybrand.xyz';
       const voucher: VoucherData = {
         code,
-        qrCode: `https://buildmybrand.xyz/voucher/${code}`,
+        qrCode: `${baseUrl}/voucher/${code}`, // This now points to the public voucher view
         expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         isUsed: false
       };
