@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import AdminDashboard from './pages/AdminDashboard';
 import VoucherRedemption from './pages/VoucherRedemption';
+import PublicVoucherView from './pages/PublicVoucherView';
 import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Palmtree, LogIn } from 'lucide-react';
@@ -13,7 +14,11 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-gray-100">
         <Toaster position="top-center" />
-        <Navbar />
+        {/* Only show Navbar on protected routes */}
+        <Routes>
+          <Route path="/admin/*" element={<Navbar />} />
+          <Route path="/redeem/*" element={<Navbar />} />
+        </Routes>
         
         <main className="container mx-auto px-4 py-8">
           <Routes>
@@ -26,12 +31,16 @@ function App() {
               }
             />
             <Route 
-              path="/voucher/:code" 
+              path="/redeem/:code" 
               element={
                 <ProtectedRoute>
                   <VoucherRedemption />
                 </ProtectedRoute>
               }
+            />
+            <Route 
+              path="/voucher/:code" 
+              element={<PublicVoucherView />}
             />
             <Route 
               path="/login" 
