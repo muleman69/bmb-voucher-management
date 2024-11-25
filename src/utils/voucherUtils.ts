@@ -13,16 +13,10 @@ export const generateUniqueCode = (length: number = 8): string => {
 };
 
 export const generateQRCode = async (code: string): Promise<string> => {
-  try {
-    const qrCodeDataUrl = await QRCode.toDataURL(code, {
-      width: 256,
-      margin: 1,
-      errorCorrectionLevel: 'H'
-    });
+  // This now returns a URL instead of a data URL
+  const baseUrl = process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:8888'
+    : 'https://your-netlify-site.netlify.app';
     
-    return qrCodeDataUrl;
-  } catch (err) {
-    console.error('Error generating QR code:', err);
-    throw new Error('Failed to generate QR code');
-  }
+  return `${baseUrl}/.netlify/functions/serve-qr-code/${encodeURIComponent(code)}`;
 };
