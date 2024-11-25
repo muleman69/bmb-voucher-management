@@ -14,37 +14,60 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-gray-100">
         <Toaster position="top-center" />
+        
+        {/* Navbar Routes */}
         <Routes>
-          <Route path="/admin/*" element={<Navbar />} />
-          <Route path="/redeem/*" element={<Navbar />} />
+          <Route 
+            path="/admin/*" 
+            element={
+              <ProtectedRoute>
+                <Navbar />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/redeem" 
+            element={
+              <ProtectedRoute>
+                <Navbar />
+              </ProtectedRoute>
+            } 
+          />
         </Routes>
         
         <main className="container mx-auto px-4 py-8">
           <Routes>
+            {/* Admin Routes */}
             <Route 
-              path="/admin" 
+              path="/admin/*" 
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
                 </ProtectedRoute>
               }
             />
+            
+            {/* Redeem Routes */}
             <Route 
-              path="/redeem/:code" 
+              path="/redeem" 
               element={
                 <ProtectedRoute>
                   <VoucherRedemption />
                 </ProtectedRoute>
               }
             />
+            
+            {/* Public Routes */}
             <Route 
               path="/voucher/:code" 
               element={<PublicVoucherView />}
             />
+            
             <Route 
               path="/login" 
               element={<Login />}
             />
+            
             <Route 
               path="/" 
               element={
@@ -52,15 +75,15 @@ function App() {
                   <div className="mb-8">
                     <Palmtree className="w-16 h-16 mx-auto text-emerald-600" />
                   </div>
-
+                  
                   <h1 className="text-4xl font-bold text-gray-900 mb-4">
                     Agavia Bar Voucher System
                   </h1>
-
+                  
                   <p className="text-xl text-gray-600 mb-8">
                     Empowering new bars and restaurants to generate buzz and build their brand—fast, effectively, and affordably.
                   </p>
-
+                  
                   <Link 
                     to="/login"
                     className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700"
