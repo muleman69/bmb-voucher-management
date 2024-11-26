@@ -1,20 +1,17 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'storage/storage';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  // Copy your exact config from Firebase Console here
-  apiKey: "AIza...", // Your actual API key
-  authDomain: "voucher-management-13b98.firebaseapp.com",
-  projectId: "voucher-management-13b98",
-  storageBucket: "voucher-management-13b98.firebasestorage.app",
-  messagingSenderId: "109883879613",
-  appId: "1:109883879613:web:5b71ce1b89bbbfd82a18dd",
-  measurementId: "G-DJZY89NB98"
+  // Replace these with your Firebase config values
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
-
-console.log('Initializing Firebase with config:', firebaseConfig);
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -23,17 +20,5 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
-// Add auth state listener for debugging
-onAuthStateChanged(auth, (user) => {
-  console.log('Auth state changed:', user ? 'User logged in' : 'No user');
-  if (user) {
-    console.log('User details:', {
-      email: user.email,
-      uid: user.uid,
-      emailVerified: user.emailVerified
-    });
-  }
-});
 
 export default app;
