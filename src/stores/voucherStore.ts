@@ -1,159 +1,98 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { generateUniqueCode, generateQRCode } from '../utils/voucherUtils';
+import { voucherServices, campaignServices } from '../lib/firebase/services';
+import type { Voucher, Campaign } from '../lib/firebase/schema';
 import toast from 'react-hot-toast';
-
-interface Voucher {
-  id: string;
-  code: string;
-  qrCode: string;
-  campaignName: string;
-  expiryDate: string;
-  isUsed: boolean;
-  usedAt?: string;
-  createdAt: string;
-  assignedTo?: string;
-  assignedAt?: string;
-  mailchimpCampaignId?: string;
-}
+import { 
+  collection,
+  query,
+  where,
+  onSnapshot,
+  Timestamp,
+  orderBy
+} from 'firebase/firestore';
+import { db } from '../lib/firebase/config';
 
 interface VoucherStore {
   vouchers: Voucher[];
+  campaigns: Campaign[];
+  isLoading: boolean;
   generateVouchers: (quantity: number, expiryDate: Date, campaignName: string, mailchimpCampaignId?: string) => Promise<void>;
   redeemVoucher: (code: string) => Promise<boolean>;
-  getVoucherByCode: (code: string) => Voucher | undefined;
-  getVouchersByCampaign: (campaignName: string) => Voucher[];
-  assignVoucher: (code: string, email: string) => Promise<boolean>;
-  getUnassignedVoucherForCampaign: (campaignName: string) => Voucher | undefined;
-  getCampaignByMailchimpId: (campaignId: string) => string | undefined;
-  deleteCampaign: (campaignName: string) => Promise<void>;
+  createCampaign: (name: string, expiryDate: Date, mailchimpCampaignId?: string) => Promise<void>;
+  initialize: () => void;
 }
 
-const migrate = (persistedState: any, version: number) => {
-  if (version === 0) {
-    return {
-      ...persistedState,
-      vouchers: persistedState.vouchers.map((v: Voucher) => ({
-        ...v,
-        mailchimpCampaignId: v.mailchimpCampaignId || undefined,
-        assignedTo: v.assignedTo || undefined,
-        assignedAt: v.assignedAt || undefined,
-      })),
-      version: 1,
+export const useVoucherStore = create<VoucherStore>((set, get) => ({
+  vouchers: [],
+  campaigns: [],
+  isLoading: true,
+
+  initialize: () => {
+    // Set up real-time listeners
+    const vouchersUnsubscribe = onSnapshot(
+      query(collection(db, 'vouchers'), orderBy('createdAt', 'desc')),
+      (snapshot) => {
+        const vouchers = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Voucher[];
+        set({ vouchers, isLoading: false });
+      }
+    );
+
+    const campaignsUnsubscribe = onSnapshot(
+      query(collection(db, 'campaigns'), orderBy('createdAt', 'desc')),
+      (snapshot) => {
+        const campaigns = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Campaign[];
+        set({ campaigns });
+      }
+    );
+
+    // Clean up listeners on unmount
+    return () => {
+      vouchersUnsubscribe();
+      campaignsUnsubscribe();
     };
-  }
-  return persistedState;
-};
+  },
 
-export const useVoucherStore = create<VoucherStore>()(
-  persist(
-    (set, get) => ({
-      vouchers: [],
-      
-      generateVouchers: async (quantity: number, expiryDate: Date, campaignName: string, mailchimpCampaignId?: string) => {
-        try {
-          const existingVouchers = get().vouchers;
-          const newVouchers: Voucher[] = [];
-          const existingCodes = new Set(existingVouchers.map(v => v.code));
-          
-          for (let i = 0; i < quantity; i++) {
-            let code;
-            do {
-              code = generateUniqueCode();
-            } while (existingCodes.has(code));
-            
-            existingCodes.add(code);
-            
-            const qrCode = await generateQRCode(code);
-            newVouchers.push({
-              id: crypto.randomUUID(),
-              code,
-              qrCode,
-              campaignName,
-              expiryDate: expiryDate.toISOString(),
-              isUsed: false,
-              createdAt: new Date().toISOString(),
-              mailchimpCampaignId
-            });
-          }
-          
-          set({ vouchers: [...existingVouchers, ...newVouchers] });
-          toast.success(`Generated ${quantity} vouchers successfully!`);
-        } catch (error) {
-          console.error('Error generating vouchers:', error);
-          throw error;
-        }
-      },
-      
-      redeemVoucher: async (code: string) => {
-        const voucher = get().getVoucherByCode(code);
-        
-        if (!voucher || voucher.isUsed || new Date(voucher.expiryDate) < new Date()) {
-          return false;
-        }
-        
-        set((state) => ({
-          vouchers: state.vouchers.map((v) =>
-            v.code === code
-              ? { ...v, isUsed: true, usedAt: new Date().toISOString() }
-              : v
-          ),
-        }));
-        
-        return true;
-      },
-      
-      getVoucherByCode: (code: string) => {
-        return get().vouchers.find((v) => v.code === code);
-      },
-
-      getVouchersByCampaign: (campaignName: string) => {
-        return get().vouchers.filter((v) => v.campaignName === campaignName);
-      },
-
-      assignVoucher: async (code: string, email: string) => {
-        const voucher = get().getVoucherByCode(code);
-        if (!voucher || voucher.assignedTo || voucher.isUsed) {
-          return false;
-        }
-
-        set((state) => ({
-          vouchers: state.vouchers.map((v) =>
-            v.code === code
-              ? { ...v, assignedTo: email, assignedAt: new Date().toISOString() }
-              : v
-          ),
-        }));
-        return true;
-      },
-
-      getUnassignedVoucherForCampaign: (campaignName: string) => {
-        return get().vouchers.find(
-          (v) => v.campaignName === campaignName && !v.assignedTo && !v.isUsed
-        );
-      },
-
-      getCampaignByMailchimpId: (campaignId: string) => {
-        const voucher = get().vouchers.find((v) => v.mailchimpCampaignId === campaignId);
-        return voucher?.campaignName;
-      },
-
-      deleteCampaign: async (campaignName: string) => {
-        try {
-          set((state) => ({
-            vouchers: state.vouchers.filter((v) => v.campaignName !== campaignName),
-          }));
-        } catch (error) {
-          console.error('Error deleting campaign:', error);
-          throw new Error('Failed to delete campaign');
-        }
-      },
-    }),
-    {
-      name: 'agavia-vouchers',
-      storage: createJSONStorage(() => localStorage),
-      version: 1,
-      migrate,
+  generateVouchers: async (quantity, expiryDate, campaignName, mailchimpCampaignId) => {
+    try {
+      await voucherServices.generateVouchers(quantity, expiryDate, campaignName, mailchimpCampaignId);
+      toast.success(`Generated ${quantity} vouchers successfully!`);
+    } catch (error) {
+      console.error('Error generating vouchers:', error);
+      toast.error('Failed to generate vouchers');
+      throw error;
     }
-  )
-);
+  },
+
+  redeemVoucher: async (code) => {
+    try {
+      const success = await voucherServices.redeemVoucher(code);
+      if (success) {
+        toast.success('Voucher redeemed successfully!');
+      } else {
+        toast.error('Invalid or expired voucher');
+      }
+      return success;
+    } catch (error) {
+      console.error('Error redeeming voucher:', error);
+      toast.error('Failed to redeem voucher');
+      throw error;
+    }
+  },
+
+  createCampaign: async (name, expiryDate, mailchimpCampaignId) => {
+    try {
+      await campaignServices.createCampaign(name, expiryDate, mailchimpCampaignId);
+      toast.success('Campaign created successfully!');
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      toast.error('Failed to create campaign');
+      throw error;
+    }
+  }
+}));
