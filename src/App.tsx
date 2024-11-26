@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import AdminDashboard from './pages/AdminDashboard';
@@ -8,8 +8,16 @@ import Login from './pages/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Palmtree, LogIn } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
+import { useAuthStore } from './stores/authStore';
+import { useVoucherStore } from './stores/voucherStore';
 
 function App() {
+  useEffect(() => {
+    // Initialize Firebase auth and voucher stores
+    useAuthStore.getState().initialize();
+    useVoucherStore.getState().initialize();
+  }, []);
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-100">
