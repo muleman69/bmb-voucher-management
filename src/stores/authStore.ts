@@ -26,8 +26,9 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
 
       initialize: () => {
-        // Set up auth state listener
+        console.log('Initializing auth store');
         onAuthStateChanged(auth, (user) => {
+          console.log('Auth state changed in store:', user ? 'User logged in' : 'No user');
           set({ 
             user, 
             isAuthenticated: !!user,
@@ -38,7 +39,9 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         try {
+          console.log('Attempting login with email:', email);
           const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          console.log('Login successful:', userCredential);
           set({ 
             isAuthenticated: true, 
             user: userCredential.user 
