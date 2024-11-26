@@ -25,21 +25,21 @@ export const voucherServices = {
     mailchimpCampaignId?: string
   ): Promise<Voucher[]> {
     const vouchers: Voucher[] = [];
-    const batch = writeBatch(db);
+    let batch = writeBatch(db);
     let batchCount = 0;
-    const BATCH_SIZE = 500; // Firebase limit
+    const BATCH_SIZE = 500; // Firebase batch limit
 
     try {
       console.log(`Starting to generate ${quantity} vouchers for campaign: ${campaignName}`);
 
-      // First, create or get campaign document
+      // First, create or get campaign reference
       const campaignRef = await this.getOrCreateCampaign(campaignName, expiryDate, mailchimpCampaignId);
 
       for (let i = 0; i < quantity; i++) {
         // Generate unique code
         const code = await this.generateUniqueCode();
         
-        // Generate and upload QR code
+        // Generate QR code
         const qrDataUrl = await QRCode.toDataURL(code, {
           width: 300,
           margin: 2,
@@ -49,8 +49,10 @@ export const voucherServices = {
           }
         });
 
-        // Upload QR code to Firebase Storage with retry logic
-        const qrCodeUrl = await this.uploadQRCode(code, qrDataUrl);
+        // Upload QR code to Firebase Storage
+        const storageRef = ref(storage, `qr-codes/${code}.png`);
+        await uploadString(storageRef, qrDataUrl, 'data_url');
+        const qrCodeUrl = await getDownloadURL(storageRef);
 
         // Create voucher document
         const voucherRef = doc(collection(db, 'vouchers'));
@@ -65,7 +67,7 @@ export const voucherServices = {
         };
 
         batch.set(voucherRef, voucherData);
-        vouchers.push({ id: voucherRef.id, ...voucherData });
+        vouchers.push({ id: voucherRef.id, ...voucherData } as Voucher);
 
         batchCount++;
 
@@ -82,30 +84,16 @@ export const voucherServices = {
         await batch.commit();
       }
 
-      // Update campaign statistics
-      await this.updateCampaignStatistics(campaignName, quantity);
+      // Update campaign voucher count
+      await updateDoc(campaignRef, {
+        totalVouchers: increment(quantity)
+      });
 
-      console.log(`Successfully generated ${quantity} vouchers for campaign: ${campaignName}`);
       return vouchers;
 
     } catch (error) {
       console.error('Error generating vouchers:', error);
-      throw new Error('Failed to generate vouchers: ' + (error as Error).message);
-    }
-  },
-
-  async uploadQRCode(code: string, qrDataUrl: string, retries = 3): Promise<string> {
-    try {
-      const storageRef = ref(storage, `qr-codes/${code}.png`);
-      await uploadString(storageRef, qrDataUrl, 'data_url');
-      return await getDownloadURL(storageRef);
-    } catch (error) {
-      if (retries > 0) {
-        console.log(`Retrying QR code upload for ${code}, ${retries} attempts remaining`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return this.uploadQRCode(code, qrDataUrl, retries - 1);
-      }
-      throw error;
+      throw new Error('Failed to generate vouchers: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   },
 
@@ -175,23 +163,33 @@ export const voucherServices = {
 
     } catch (error) {
       console.error('Error redeeming voucher:', error);
-      throw new Error('Failed to redeem voucher');
+      return false;
     }
   },
 
-  async updateCampaignStatistics(campaignName: string, addedVouchers: number): Promise<void> {
-    const campaignsRef = collection(db, 'campaigns');
-    const q = query(campaignsRef, where('name', '==', campaignName));
-    const querySnapshot = await getDocs(q);
+  async assignVoucher(code: string, email: string): Promise<boolean> {
+    try {
+      const vouchersRef = collection(db, 'vouchers');
+      const q = query(vouchersRef, where('code', '==', code));
+      const querySnapshot = await getDocs(q);
 
-    if (!querySnapshot.empty) {
-      await updateDoc(doc(db, 'campaigns', querySnapshot.docs[0].id), {
-        totalVouchers: increment(addedVouchers)
+      if (querySnapshot.empty || querySnapshot.docs[0].data().assignedTo) {
+        return false;
+      }
+
+      await updateDoc(doc(db, 'vouchers', querySnapshot.docs[0].id), {
+        assignedTo: email,
+        assignedAt: serverTimestamp()
       });
+
+      return true;
+    } catch (error) {
+      console.error('Error assigning voucher:', error);
+      return false;
     }
   },
 
-  async getOrCreateCampaign(
+  private async getOrCreateCampaign(
     name: string, 
     expiryDate: Date, 
     mailchimpCampaignId?: string
@@ -204,15 +202,36 @@ export const voucherServices = {
       return doc(db, 'campaigns', querySnapshot.docs[0].id);
     }
 
-    const campaignData = {
+    const docRef = await addDoc(campaignsRef, {
       name,
       expiryDate: Timestamp.fromDate(expiryDate),
       totalVouchers: 0,
       usedVouchers: 0,
       createdAt: serverTimestamp(),
       mailchimpCampaignId
-    };
+    });
 
-    return await addDoc(collection(db, 'campaigns'), campaignData);
+    return docRef;
+  }
+};
+
+export const campaignServices = {
+  async getCampaignStats(campaignName: string): Promise<{
+    total: number;
+    used: number;
+    expired: number;
+  }> {
+    const q = query(collection(db, 'vouchers'), where('campaignName', '==', campaignName));
+    const querySnapshot = await getDocs(q);
+    const now = new Date();
+
+    return querySnapshot.docs.reduce((stats, doc) => {
+      const voucher = doc.data() as Voucher;
+      return {
+        total: stats.total + 1,
+        used: stats.used + (voucher.isUsed ? 1 : 0),
+        expired: stats.expired + (voucher.expiryDate.toDate() < now ? 1 : 0)
+      };
+    }, { total: 0, used: 0, expired: 0 });
   }
 };
