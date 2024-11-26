@@ -11,8 +11,12 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.24.0",
+    "@firebase/auth": "^1.5.1",
+    "@firebase/firestore": "^4.4.0",
+    "@firebase/storage": "^0.12.0",
     "@mailchimp/mailchimp_marketing": "^3.0.80",
     "crypto-js": "^4.2.0",
+    "firebase": "^10.7.1",
     "html5-qrcode": "^2.3.8",
     "jose": "^5.2.3",
     "lucide-react": "^0.344.0",
@@ -21,8 +25,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hot-toast": "^2.4.1",
-    "react-router-dom": "^6.22.3",                
-    "firebase-admin": "^12.0.0",
+    "react-router-dom": "^6.22.3",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
