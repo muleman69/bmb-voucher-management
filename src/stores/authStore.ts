@@ -1,36 +1,71 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { 
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { auth } from '../lib/firebase/config';
+import toast from 'react-hot-toast';
 
 interface AuthState {
   isAuthenticated: boolean;
-  token: string | null;
-  login: (token: string) => void;
-  logout: () => void;
+  user: FirebaseUser | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  initialize: () => void;
 }
-
-const migrate = (persistedState: any, version: number) => {
-  if (version === 0) {
-    return {
-      ...persistedState,
-      version: 1,
-    };
-  }
-  return persistedState;
-};
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       isAuthenticated: false,
-      token: null,
-      login: (token: string) => set({ isAuthenticated: true, token }),
-      logout: () => set({ isAuthenticated: false, token: null }),
+      user: null,
+      isLoading: true,
+
+      initialize: () => {
+        // Set up auth state listener
+        onAuthStateChanged(auth, (user) => {
+          set({ 
+            user, 
+            isAuthenticated: !!user,
+            isLoading: false
+          });
+        });
+      },
+
+      login: async (email: string, password: string) => {
+        try {
+          const userCredential = await signInWithEmailAndPassword(auth, email, password);
+          set({ 
+            isAuthenticated: true, 
+            user: userCredential.user 
+          });
+          toast.success('Successfully logged in');
+        } catch (error) {
+          console.error('Login error:', error);
+          toast.error('Invalid email or password');
+          throw error;
+        }
+      },
+
+      logout: async () => {
+        try {
+          await signOut(auth);
+          set({ isAuthenticated: false, user: null });
+          toast.success('Successfully logged out');
+        } catch (error) {
+          console.error('Logout error:', error);
+          toast.error('Error logging out');
+          throw error;
+        }
+      }
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => localStorage),
-      version: 1,
-      migrate,
+      partialize: (state) => ({ isAuthenticated: state.isAuthenticated })
     }
   )
 );
