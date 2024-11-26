@@ -189,7 +189,7 @@ export const voucherServices = {
     }
   },
 
-  private async getOrCreateCampaign(
+  async getOrCreateCampaign(
     name: string, 
     expiryDate: Date, 
     mailchimpCampaignId?: string
