@@ -101,7 +101,8 @@ export const voucherServices = {
     return true;
   },
 
-  private async updateCampaignCount(campaignName: string): Promise<void> {
+  // Remove `private` keyword here as it’s not allowed in object literals
+  async updateCampaignCount(campaignName: string): Promise<void> {
     const campaignsRef = collection(db, 'campaigns');
     const q = query(campaignsRef, where('name', '==', campaignName));
     const querySnapshot = await getDocs(q);
