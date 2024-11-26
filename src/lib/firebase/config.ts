@@ -1,10 +1,11 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getStorage } from 'storage/storage';
 
 const firebaseConfig = {
-  apiKey: "A1ZaSyD2A2H2hDgAZZ6uYFdlCDqWH6OtXq-II4M",
+  // Copy your exact config from Firebase Console here
+  apiKey: "AIza...", // Your actual API key
   authDomain: "voucher-management-13b98.firebaseapp.com",
   projectId: "voucher-management-13b98",
   storageBucket: "voucher-management-13b98.firebasestorage.app",
@@ -13,6 +14,8 @@ const firebaseConfig = {
   measurementId: "G-DJZY89NB98"
 };
 
+console.log('Initializing Firebase with config:', firebaseConfig);
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
@@ -20,5 +23,17 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// Add auth state listener for debugging
+onAuthStateChanged(auth, (user) => {
+  console.log('Auth state changed:', user ? 'User logged in' : 'No user');
+  if (user) {
+    console.log('User details:', {
+      email: user.email,
+      uid: user.uid,
+      emailVerified: user.emailVerified
+    });
+  }
+});
 
 export default app;
