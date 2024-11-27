@@ -19,83 +19,69 @@ import type { Voucher, Campaign } from './schema';
 
 export const voucherServices = {
   async generateVouchers(
-    quantity: number,
-    expiryDate: Date,
-    campaignName: string,
-    mailchimpCampaignId?: string
-  ): Promise<Voucher[]> {
-    const vouchers: Voucher[] = [];
-    let batch = writeBatch(db);
-    let batchCount = 0;
-    const BATCH_SIZE = 500; // Firebase batch limit
+  quantity: number,
+  expiryDate: Date,
+  campaignName: string,
+  mailchimpCampaignId?: string
+): Promise<Voucher[]> {
+  const vouchers: Voucher[] = [];
+  let batch = writeBatch(db);
+  let batchCount = 0;
+  const BATCH_SIZE = 500;
 
-    try {
-      console.log(`Starting to generate ${quantity} vouchers for campaign: ${campaignName}`);
+  try {
+    console.log(`Starting to generate ${quantity} vouchers for campaign: ${campaignName}`);
+    const campaignRef = await this.getOrCreateCampaign(campaignName, expiryDate, mailchimpCampaignId);
 
-      // First, create or get campaign reference
-      const campaignRef = await this.getOrCreateCampaign(campaignName, expiryDate, mailchimpCampaignId);
-
-      for (let i = 0; i < quantity; i++) {
-        // Generate unique code
-        const code = await this.generateUniqueCode();
-        
-        // Generate QR code
-        const qrDataUrl = await QRCode.toDataURL(code, {
-          width: 300,
-          margin: 2,
-          color: {
-            dark: '#115E59',
-            light: '#FFFFFF'
-          }
-        });
-
-        // Upload QR code to Firebase Storage
-        const storageRef = ref(storage, `qr-codes/${code}.png`);
-        await uploadString(storageRef, qrDataUrl, 'data_url');
-        const qrCodeUrl = await getDownloadURL(storageRef);
-
-        // Create voucher document
-        const voucherRef = doc(collection(db, 'vouchers'));
-        const voucherData: Omit<Voucher, 'id'> = {
-          code,
-          qrCodeUrl,
-          campaignName,
-          expiryDate: Timestamp.fromDate(expiryDate),
-          isUsed: false,
-          createdAt: Timestamp.now(),
-          mailchimpCampaignId
-        };
-
-        batch.set(voucherRef, voucherData);
-        vouchers.push({ id: voucherRef.id, ...voucherData } as Voucher);
-
-        batchCount++;
-
-        // Commit batch when it reaches the limit
-        if (batchCount === BATCH_SIZE) {
-          await batch.commit();
-          batch = writeBatch(db);
-          batchCount = 0;
+    for (let i = 0; i < quantity; i++) {
+      const code = await this.generateUniqueCode();
+      const qrDataUrl = await QRCode.toDataURL(code, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#115E59',
+          light: '#FFFFFF'
         }
-      }
-
-      // Commit any remaining documents
-      if (batchCount > 0) {
-        await batch.commit();
-      }
-
-      // Update campaign voucher count
-      await updateDoc(campaignRef, {
-        totalVouchers: increment(quantity)
       });
 
-      return vouchers;
+      // Store QR code directly as data URL
+      const voucherRef = doc(collection(db, 'vouchers'));
+      const voucherData: Omit<Voucher, 'id'> = {
+        code,
+        qrCodeUrl: qrDataUrl, // Store the data URL directly
+        campaignName,
+        expiryDate: Timestamp.fromDate(expiryDate),
+        isUsed: false,
+        createdAt: Timestamp.now(),
+        mailchimpCampaignId
+      };
 
-    } catch (error) {
-      console.error('Error generating vouchers:', error);
-      throw new Error('Failed to generate vouchers: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      batch.set(voucherRef, voucherData);
+      vouchers.push({ id: voucherRef.id, ...voucherData } as Voucher);
+
+      batchCount++;
+      if (batchCount === BATCH_SIZE) {
+        await batch.commit();
+        batch = writeBatch(db);
+        batchCount = 0;
+      }
     }
-  },
+
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+
+    await updateDoc(campaignRef, {
+      totalVouchers: increment(quantity)
+    });
+
+    return vouchers;
+
+  } catch (error) {
+    console.error('Error generating vouchers:', error);
+    throw new Error('Failed to generate vouchers: ' + (error instanceof Error ? error.message : 'Unknown error'));
+  }
+},
 
   async generateUniqueCode(length: number = 8): Promise<string> {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
