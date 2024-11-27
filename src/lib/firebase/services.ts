@@ -50,9 +50,8 @@ export const voucherServices = {
         code,
         qrCodeUrl: qrDataUrl, // Store the data URL directly
         campaignName,
-        expiryDate: Timestamp.fromDate(expiryDate),
-        isUsed: false,
-        createdAt: Timestamp.now(),
+        expiryDate: new Date(expiryDate).toISOString(),
+createdAt: new Date().toISOString(),
         mailchimpCampaignId
       };
 
