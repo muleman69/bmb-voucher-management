@@ -19,68 +19,67 @@ import type { Voucher, Campaign } from './schema';
 
 export const voucherServices = {
   async generateVouchers(
-  quantity: number,
-  expiryDate: Date,
-  campaignName: string,
-  mailchimpCampaignId?: string
-): Promise<Voucher[]> {
-  const vouchers: Voucher[] = [];
-  let batch = writeBatch(db);
-  let batchCount = 0;
-  const BATCH_SIZE = 500;
+    quantity: number,
+    expiryDate: Date,
+    campaignName: string,
+    mailchimpCampaignId?: string
+  ): Promise<Voucher[]> {
+    const vouchers: Voucher[] = [];
+    let batch = writeBatch(db);
+    let batchCount = 0;
+    const BATCH_SIZE = 500;
 
-  try {
-    console.log(`Starting to generate ${quantity} vouchers for campaign: ${campaignName}`);
-    const campaignRef = await this.getOrCreateCampaign(campaignName, expiryDate, mailchimpCampaignId);
+    try {
+      console.log(`Starting to generate ${quantity} vouchers for campaign: ${campaignName}`);
+      const campaignRef = await this.getOrCreateCampaign(campaignName, expiryDate, mailchimpCampaignId);
 
-    for (let i = 0; i < quantity; i++) {
-      const code = await this.generateUniqueCode();
-      const qrDataUrl = await QRCode.toDataURL(code, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: '#115E59',
-          light: '#FFFFFF'
+      for (let i = 0; i < quantity; i++) {
+        const code = await this.generateUniqueCode();
+        const qrDataUrl = await QRCode.toDataURL(code, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: '#115E59',
+            light: '#FFFFFF'
+          }
+        });
+
+        const voucherRef = doc(collection(db, 'vouchers'));
+        const voucherData: Omit<Voucher, 'id'> = {
+          code,
+          qrCodeUrl: qrDataUrl,
+          campaignName,
+          expiryDate: new Date(expiryDate).toISOString(),
+          createdAt: new Date().toISOString(),
+          mailchimpCampaignId
+        };
+
+        batch.set(voucherRef, voucherData);
+        vouchers.push({ id: voucherRef.id, ...voucherData } as Voucher);
+
+        batchCount++;
+        if (batchCount === BATCH_SIZE) {
+          await batch.commit();
+          batch = writeBatch(db);
+          batchCount = 0;
         }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+
+      await updateDoc(campaignRef, {
+        totalVouchers: increment(quantity)
       });
 
-      // Store QR code directly as data URL
-      const voucherRef = doc(collection(db, 'vouchers'));
-      const voucherData: Omit<Voucher, 'id'> = {
-        code,
-        qrCodeUrl: qrDataUrl, // Store the data URL directly
-        campaignName,
-        expiryDate: new Date(expiryDate).toISOString(),
-createdAt: new Date().toISOString(),
-        mailchimpCampaignId
-      };
+      return vouchers;
 
-      batch.set(voucherRef, voucherData);
-      vouchers.push({ id: voucherRef.id, ...voucherData } as Voucher);
-
-      batchCount++;
-      if (batchCount === BATCH_SIZE) {
-        await batch.commit();
-        batch = writeBatch(db);
-        batchCount = 0;
-      }
+    } catch (error) {
+      console.error('Error generating vouchers:', error);
+      throw new Error('Failed to generate vouchers: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-
-    if (batchCount > 0) {
-      await batch.commit();
-    }
-
-    await updateDoc(campaignRef, {
-      totalVouchers: increment(quantity)
-    });
-
-    return vouchers;
-
-  } catch (error) {
-    console.error('Error generating vouchers:', error);
-    throw new Error('Failed to generate vouchers: ' + (error instanceof Error ? error.message : 'Unknown error'));
-  }
-},
+  },
 
   async generateUniqueCode(length: number = 8): Promise<string> {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -93,7 +92,6 @@ createdAt: new Date().toISOString(),
         () => chars.charAt(Math.floor(Math.random() * chars.length))
       ).join('');
 
-      // Check if code exists
       const q = query(collection(db, 'vouchers'), where('code', '==', code));
       const querySnapshot = await getDocs(q);
       
@@ -119,20 +117,19 @@ createdAt: new Date().toISOString(),
 
       const voucherDoc = querySnapshot.docs[0];
       const voucher = voucherDoc.data() as Voucher;
+      const expiryDate = new Date(voucher.expiryDate);
 
-      if (voucher.isUsed || voucher.expiryDate.toDate() < new Date()) {
+      if (voucher.isUsed || expiryDate < new Date()) {
         return false;
       }
 
       const batch = writeBatch(db);
 
-      // Update voucher
       batch.update(doc(db, 'vouchers', voucherDoc.id), {
         isUsed: true,
-        usedAt: serverTimestamp()
+        usedAt: new Date().toISOString()
       });
 
-      // Update campaign statistics
       const campaignsRef = collection(db, 'campaigns');
       const campaignQuery = query(campaignsRef, where('name', '==', voucher.campaignName));
       const campaignSnapshot = await getDocs(campaignQuery);
@@ -164,7 +161,7 @@ createdAt: new Date().toISOString(),
 
       await updateDoc(doc(db, 'vouchers', querySnapshot.docs[0].id), {
         assignedTo: email,
-        assignedAt: serverTimestamp()
+        assignedAt: new Date().toISOString()
       });
 
       return true;
@@ -189,14 +186,41 @@ createdAt: new Date().toISOString(),
 
     const docRef = await addDoc(campaignsRef, {
       name,
-      expiryDate: Timestamp.fromDate(expiryDate),
+      expiryDate: new Date(expiryDate).toISOString(),
       totalVouchers: 0,
       usedVouchers: 0,
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
       mailchimpCampaignId
     });
 
     return docRef;
+  },
+
+  async deleteCampaign(campaignName: string): Promise<void> {
+    try {
+      const campaignsRef = collection(db, 'campaigns');
+      const campaignQuery = query(campaignsRef, where('name', '==', campaignName));
+      const campaignSnapshot = await getDocs(campaignQuery);
+
+      const vouchersRef = collection(db, 'vouchers');
+      const voucherQuery = query(vouchersRef, where('campaignName', '==', campaignName));
+      const voucherSnapshot = await getDocs(voucherQuery);
+
+      const batch = writeBatch(db);
+
+      if (!campaignSnapshot.empty) {
+        batch.delete(doc(db, 'campaigns', campaignSnapshot.docs[0].id));
+      }
+
+      voucherSnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      throw new Error('Failed to delete campaign');
+    }
   }
 };
 
@@ -215,7 +239,7 @@ export const campaignServices = {
       return {
         total: stats.total + 1,
         used: stats.used + (voucher.isUsed ? 1 : 0),
-        expired: stats.expired + (voucher.expiryDate.toDate() < now ? 1 : 0)
+        expired: stats.expired + (new Date(voucher.expiryDate) < now ? 1 : 0)
       };
     }, { total: 0, used: 0, expired: 0 });
   }
