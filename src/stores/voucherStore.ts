@@ -1,3 +1,4 @@
+typescript
 import { create } from 'zustand';
 import { voucherServices, campaignServices } from '../lib/firebase/services';
 import type { Voucher, Campaign } from '../lib/firebase/schema';
@@ -19,6 +20,7 @@ interface VoucherStore {
   generateVouchers: (quantity: number, expiryDate: Date, campaignName: string, mailchimpCampaignId?: string) => Promise<void>;
   redeemVoucher: (code: string) => Promise<boolean>;
   createCampaign: (name: string, expiryDate: Date, mailchimpCampaignId?: string) => Promise<void>;
+  deleteCampaign: (campaignName: string) => Promise<void>;
   initialize: () => void;
 }
 
@@ -92,6 +94,17 @@ export const useVoucherStore = create<VoucherStore>((set, get) => ({
     } catch (error) {
       console.error('Error creating campaign:', error);
       toast.error('Failed to create campaign');
+      throw error;
+    }
+  },
+
+  deleteCampaign: async (campaignName) => {
+    try {
+      await voucherServices.deleteCampaign(campaignName);
+      toast.success('Campaign deleted successfully');
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      toast.error('Failed to delete campaign');
       throw error;
     }
   }
