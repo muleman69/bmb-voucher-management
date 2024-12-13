@@ -1,4 +1,3 @@
-typescript
 import { create } from 'zustand';
 import { voucherServices, campaignServices } from '../lib/firebase/services';
 import type { Voucher, Campaign } from '../lib/firebase/schema';
@@ -12,7 +11,6 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
-
 interface VoucherStore {
   vouchers: Voucher[];
   campaigns: Campaign[];
